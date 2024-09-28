@@ -18,7 +18,13 @@
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+
+    "baseUrl": ".", // baseUrl 추가                                                                                                                      
+    "paths": {                                                                                                                                            
+      "@/*": ["./src/*"] // paths 추가                                                                                                                      
+    }   
   },
-  "include": ["src"]
+  "include": ["env.d.ts", "src", "auto-imports.d.ts"],
+  "exclude": ["src/**/__tests__/*"],
 }
