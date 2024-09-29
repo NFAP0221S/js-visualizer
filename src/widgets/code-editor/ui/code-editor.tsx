@@ -1,97 +1,95 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
 import { Button } from "@/shared/ui/button";
-import Editor from "react-simple-code-editor";
 import {
   PlayIcon,
   PauseIcon,
   StepForwardIcon,
   RotateCwIcon,
 } from "lucide-react";
+import Editor from "react-simple-code-editor";
+import Prism from "prismjs";
+import "prismjs/components/prism-javascript"; // JavaScript 구문 강조
+import "prismjs/themes/prism.css"; // Prism 테마 (기본 테마)
+
+// 라인 번호를 표시하기 위한 간단한 컴포넌트
+function LineNumbers({ code }: { code: string }) {
+  const lines = code.split("\n").length;
+  const numbers = Array.from({ length: lines }, (_, i) => i + 1);
+  return (
+    <div className="line-numbers">
+      {numbers.map((number) => (
+        <div key={number} className="line-number">
+          {number}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export function CodeEditor() {
   const [code, setCode] = useState("// Enter your JavaScript code here\n");
   const [isRunning, setIsRunning] = useState(false);
   const [step, setStep] = useState(0);
-  console.log(step);
+
+  useEffect(() => {
+    console.log(step);
+  }, [step])
+
   const handleRun = () => {
     setIsRunning(true);
+    // 코드 실행 로직 추가
   };
 
   const handlePause = () => {
     setIsRunning(false);
+    // 코드 일시정지 로직 추가
   };
 
   const handleStep = () => {
     setStep((prev) => prev + 1);
+    // 단계 실행 로직 추가
   };
 
   const handleReset = () => {
     setIsRunning(false);
     setCode("// Enter your JavaScript code here\n");
     setStep(0);
+    // 코드 리셋 로직 추가
   };
 
-  const highlightWithLineNumbers = (input: string) => {
-    const lines = input.split("\n");
-    return lines.map((line, i) => (
-      <div key={i} className="table-row">
-        <span className="table-cell text-right pr-4 select-none opacity-50">
-          {i + 1}
-        </span>
-        <span className="table-cell">{highlightSyntax(line)}</span>
-      </div>
-    ));
+  // Prism를 사용한 구문 강조 함수
+  const highlightCode = (code: string) => {
+    return Prism.highlight(code, Prism.languages.javascript, "javascript");
   };
-  const highlightSyntax = (code: string) => {
-    // Simple regex-based syntax highlighting
-    return code
-      .replace(
-        /\/\/.*/g,
-        (match) => `<span style="color: #6A9955;">${match}</span>`
-      ) // Comments
-      .replace(
-        /\b(const|let|var|function|return|if|else|for|while)\b/g,
-        (match) => `<span style="color: #569CD6;">${match}</span>`
-      ) // Keywords
-      .replace(
-        /\b(\d+)\b/g,
-        (match) => `<span style="color: #B5CEA8;">${match}</span>`
-      ) // Numbers
-      .replace(
-        /(['"`]).*?\1/g,
-        (match) => `<span style="color: #CE9178;">${match}</span>`
-      ) // Strings
-      .replace(
-        /\b([A-Za-z_$][A-Za-z0-9_$]*)\(/g,
-        (match, name) => `<span style="color: #DCDCAA;">${name}</span>(`
-      ); // Function calls
-  };
+
   return (
     <Card className="lg:col-span-1">
       <CardHeader>
         <CardTitle>Code Editor</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="border rounded-md overflow-hidden mb-4">
-          <div className="bg-muted text-muted-foreground py-2 px-4 text-sm">
-            script.js
+        <div className="border rounded-md overflow-hidden mb-4 flex">
+          {/* 라인 번호 표시 */}
+          <LineNumbers code={code} />
+          {/* 코드 에디터 */}
+          <div className="relative flex-1">
+            <Editor
+              value={code}
+              onValueChange={(code) => setCode(code)}
+              highlight={highlightCode}
+              padding={10}
+              style={{
+                fontFamily: '"Fira code", "Fira Mono", monospace',
+                fontSize: 14,
+                minHeight: "300px",
+                outline: 0, // 포커스 시 외곽선 제거
+              }}
+              className="code-editor"
+            />
           </div>
-          <Editor
-            value={code}
-            onValueChange={setCode}
-            highlight={(input) => highlightWithLineNumbers(input)}
-            padding={10}
-            style={{
-              fontFamily: '"Fira code", "Fira Mono", monospace',
-              fontSize: 14,
-              backgroundColor: "hsl(var(--background))",
-              minHeight: "300px",
-            }}
-            className="min-h-[300px] w-full"
-          />
         </div>
         <div className="flex flex-wrap justify-center gap-2">
           <Button onClick={handleRun} disabled={isRunning} variant="default">
