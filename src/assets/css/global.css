@@ -64,3 +64,22 @@
     @apply bg-background text-foreground;
   }
 }
+
+.line-numbers {
+  background-color: #f5f5f5;
+  padding: 10px;
+  user-select: none;
+}
+
+.line-number {
+  text-align: right;
+  padding-right: 10px;
+  color: #888;
+  font-size: 12px;
+}
+
+.code-editor {
+  background-color: #2d2d2d;
+  color: #ccc;
+  overflow: auto;
+}

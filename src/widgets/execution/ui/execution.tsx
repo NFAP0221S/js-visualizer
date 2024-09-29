@@ -1,7 +1,12 @@
+import { useContext } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
 import { ExecutionCard } from "./execution-card";
+import { ExecutionContext } from "@/app/context/execution-context";
 
 export function Execution() {
+  const { state } = useContext(ExecutionContext);
+  const { callStack, eventLoop, taskQueue, microtaskQueue, memoryUsage, executionTime } = state;
+
   return (
     <div className="lg:col-span-1 space-y-6">
       <Card>
@@ -11,16 +16,16 @@ export function Execution() {
         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <ExecutionCard
             title="Call Stack"
-            items={["main()", "function1()", "function2()"]}
+            items={callStack}
           />
-          <ExecutionCard title="Event Loop" items={["Processing..."]} />
+          <ExecutionCard title="Event Loop" items={eventLoop} />
           <ExecutionCard
             title="Task Queue"
-            items={["setTimeout()", "setInterval()"]}
+            items={taskQueue}
           />
           <ExecutionCard
             title="Microtask Queue"
-            items={["Promise.resolve()", "process.nextTick()"]}
+            items={microtaskQueue}
           />
         </CardContent>
       </Card>
@@ -30,8 +35,8 @@ export function Execution() {
         </CardHeader>
         <CardContent>
           <div className="flex justify-between">
-            <span>Memory Usage: 45.32%</span>
-            <span>Execution Time: 0.23s</span>
+            <span>Memory Usage: {memoryUsage}</span>
+            <span>Execution Time: {executionTime}</span>
           </div>
         </CardContent>
       </Card>

@@ -1,6 +1,7 @@
+// src/widgets/code-editor/ui/code-editor.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useContext } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
 import { Button } from "@/shared/ui/button";
 import {
@@ -11,8 +12,10 @@ import {
 } from "lucide-react";
 import Editor from "react-simple-code-editor";
 import Prism from "prismjs";
-import "prismjs/components/prism-javascript"; // JavaScript 구문 강조
-import "prismjs/themes/prism.css"; // Prism 테마 (기본 테마)
+import "prismjs/components/prism-javascript";
+import "prismjs/themes/prism.css";
+import { ExecutionContext } from "@/app/context/execution-context";
+import { executeCode } from "@/shared/lib/executor"; // 코드 실행 로직 함수
 
 // 라인 번호를 표시하기 위한 간단한 컴포넌트
 function LineNumbers({ code }: { code: string }) {
@@ -30,33 +33,31 @@ function LineNumbers({ code }: { code: string }) {
 }
 
 export function CodeEditor() {
-  const [code, setCode] = useState("// Enter your JavaScript code here\n");
-  const [isRunning, setIsRunning] = useState(false);
-  const [step, setStep] = useState(0);
+  const { state, dispatch } = useContext(ExecutionContext);
+  const { code, isRunning, step } = state;
 
   useEffect(() => {
     console.log(step);
-  }, [step])
+  }, [step]);
 
-  const handleRun = () => {
-    setIsRunning(true);
-    // 코드 실행 로직 추가
+  const handleRun = async () => {
+    dispatch({ type: 'RUN' });
+    await executeCode(code, dispatch);
+    dispatch({ type: 'PAUSE' }); // 실행 완료 후 일시정지
   };
 
   const handlePause = () => {
-    setIsRunning(false);
-    // 코드 일시정지 로직 추가
+    dispatch({ type: 'PAUSE' });
+    // 코드 일시정지 로직 추가 (인터프리터 제어 등)
   };
 
   const handleStep = () => {
-    setStep((prev) => prev + 1);
+    dispatch({ type: 'STEP_FORWARD' });
     // 단계 실행 로직 추가
   };
 
   const handleReset = () => {
-    setIsRunning(false);
-    setCode("// Enter your JavaScript code here\n");
-    setStep(0);
+    dispatch({ type: 'RESET' });
     // 코드 리셋 로직 추가
   };
 
@@ -72,13 +73,11 @@ export function CodeEditor() {
       </CardHeader>
       <CardContent>
         <div className="border rounded-md overflow-hidden mb-4 flex">
-          {/* 라인 번호 표시 */}
           <LineNumbers code={code} />
-          {/* 코드 에디터 */}
           <div className="relative flex-1">
             <Editor
               value={code}
-              onValueChange={(code) => setCode(code)}
+              onValueChange={(newCode) => dispatch({ type: 'SET_CODE', payload: newCode })}
               highlight={highlightCode}
               padding={10}
               style={{
