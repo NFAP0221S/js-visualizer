@@ -1,7 +1,6 @@
-// src/widgets/code-editor/ui/code-editor.tsx
 "use client";
 
-import React, { useEffect, useContext } from "react";
+import { useEffect, useContext } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
 import { Button } from "@/shared/ui/button";
 import {
@@ -41,23 +40,23 @@ export function CodeEditor() {
   }, [step]);
 
   const handleRun = async () => {
-    dispatch({ type: 'RUN' });
+    dispatch({ type: "RUN" });
     await executeCode(code, dispatch);
-    dispatch({ type: 'PAUSE' }); // 실행 완료 후 일시정지
+    dispatch({ type: "PAUSE" }); // 실행 완료 후 일시정지
   };
 
   const handlePause = () => {
-    dispatch({ type: 'PAUSE' });
+    dispatch({ type: "PAUSE" });
     // 코드 일시정지 로직 추가 (인터프리터 제어 등)
   };
 
   const handleStep = () => {
-    dispatch({ type: 'STEP_FORWARD' });
+    dispatch({ type: "STEP_FORWARD" });
     // 단계 실행 로직 추가
   };
 
   const handleReset = () => {
-    dispatch({ type: 'RESET' });
+    dispatch({ type: "RESET" });
     // 코드 리셋 로직 추가
   };
 
@@ -77,7 +76,9 @@ export function CodeEditor() {
           <div className="relative flex-1">
             <Editor
               value={code}
-              onValueChange={(newCode) => dispatch({ type: 'SET_CODE', payload: newCode })}
+              onValueChange={(newCode) =>
+                dispatch({ type: "SET_CODE", payload: newCode })
+              }
               highlight={highlightCode}
               padding={10}
               style={{

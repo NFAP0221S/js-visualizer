@@ -1,6 +1,6 @@
-import { createContext, useReducer, ReactNode, Dispatch } from 'react';
-import { executionReducer, initialState } from './execution-reducer';
-import { ExecutionState, ExecutionAction } from '@/shared/types/type';
+import { createContext, useReducer, ReactNode, Dispatch } from "react";
+import { executionReducer, initialState } from "./execution-reducer";
+import { ExecutionState, ExecutionAction } from "@/shared/types/type";
 
 interface ExecutionContextProps {
   state: ExecutionState;
