@@ -15,6 +15,7 @@ import "prismjs/components/prism-javascript";
 import "prismjs/themes/prism.css";
 import { ExecutionContext } from "@/app/context/execution-context";
 import { executeCode } from "@/shared/lib/executor"; // 코드 실행 로직 함수
+import { parse } from "acorn"; // AST 파싱을 위한 acorn 임포트
 
 // 라인 번호를 표시하기 위한 간단한 컴포넌트
 function LineNumbers({ code }: { code: string }) {
@@ -33,16 +34,18 @@ function LineNumbers({ code }: { code: string }) {
 
 export function CodeEditor() {
   const { state, dispatch } = useContext(ExecutionContext);
-  const { code, isRunning, step } = state;
+  const { code, isRunning, ast, step } = state; // AST와 스텝 상태 가져오기
 
   useEffect(() => {
     console.log(step);
   }, [step]);
 
   const handleRun = async () => {
-    dispatch({ type: "RUN" });
-    await executeCode(code, dispatch);
-    dispatch({ type: "PAUSE" }); // 실행 완료 후 일시정지
+    const parsedAst = parse(code, { ecmaVersion: "latest" }); // AST 저장
+    dispatch({ type: "RUN", payload: parsedAst });
+    // dispatch({ type: "RESET_STEP" }); // 스텝 초기화 액션 추가
+    // await executeCode(code, dispatch); // 코드 실행
+    // dispatch({ type: "PAUSE" }); // 실행 완료 후 일시정지
   };
 
   const handlePause = () => {
@@ -50,17 +53,24 @@ export function CodeEditor() {
     // 코드 일시정지 로직 추가 (인터프리터 제어 등)
   };
 
-  const handleStep = () => {
-    dispatch({ type: "STEP_FORWARD" });
-    // 단계 실행 로직 추가
+  const handleStep = async () => {
+    if (ast) {
+      const node = ast.body[step]; // 리듀서의 step 값을 사용하여 현재 스텝에 해당하는 노드 가져오기
+      if (node) {
+        await executeCode(code, dispatch, node); // node를 인자로 전달하여 실행
+        dispatch({ type: "STEP_FORWARD" }); // 스텝 증가
+      } else {
+        console.warn("모든 스텝이 완료되었습니다."); // 모든 노드를 처리한 경우
+      }
+    }
   };
 
   const handleReset = () => {
     dispatch({ type: "RESET" });
-    // 코드 리셋 로직 추가
+    // 리셋 시 AST도 초기화될 것이므로 별도 처리 필요 시 추가 가능
   };
 
-  // Prism를 사용한 구문 강조 함수
+  // Prism을 사용한 구문 강조 함수
   const highlightCode = (code: string) => {
     return Prism.highlight(code, Prism.languages.javascript, "javascript");
   };

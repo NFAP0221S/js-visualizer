@@ -8,8 +8,7 @@ export const initialState: ExecutionState = {
   eventLoop: [],
   taskQueue: [],
   microtaskQueue: [],
-  memoryUsage: "0%",
-  executionTime: "0s",
+  ast: null, // AST 상태 추가
 };
 
 export function executionReducer(
@@ -20,7 +19,7 @@ export function executionReducer(
     case "SET_CODE":
       return { ...state, code: action.payload };
     case "RUN":
-      return { ...state, isRunning: true };
+      return { ...state, isRunning: true, ast: action.payload }; // AST 저장
     case "PAUSE":
       return { ...state, isRunning: false };
     case "STEP_FORWARD":
@@ -35,12 +34,6 @@ export function executionReducer(
       return { ...state, taskQueue: action.payload };
     case "UPDATE_MICROTASK_QUEUE":
       return { ...state, microtaskQueue: action.payload };
-    case "UPDATE_PERFORMANCE_METRICS":
-      return {
-        ...state,
-        memoryUsage: action.payload.memoryUsage,
-        executionTime: action.payload.executionTime,
-      };
     default:
       return state;
   }

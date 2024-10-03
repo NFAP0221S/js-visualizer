@@ -6,13 +6,14 @@ export interface ExecutionState {
   eventLoop: string[];
   taskQueue: string[];
   microtaskQueue: string[];
-  memoryUsage: string;
-  executionTime: string;
+  ast: any;
+  // memoryUsage: string;
+  // executionTime: string;
 }
 
 export type ExecutionAction =
   | { type: "SET_CODE"; payload: string }
-  | { type: "RUN" }
+  | { type: "RUN"; payload: any }
   | { type: "PAUSE" }
   | { type: "STEP_FORWARD" }
   | { type: "RESET" }
@@ -20,7 +21,7 @@ export type ExecutionAction =
   | { type: "UPDATE_EVENT_LOOP"; payload: string[] }
   | { type: "UPDATE_TASK_QUEUE"; payload: string[] }
   | { type: "UPDATE_MICROTASK_QUEUE"; payload: string[] }
-  | {
-      type: "UPDATE_PERFORMANCE_METRICS";
-      payload: { memoryUsage: string; executionTime: string };
-    };
+  // | {
+  //     type: "UPDATE_PERFORMANCE_METRICS";
+  //     payload: { memoryUsage: string; executionTime: string };
+  //   };
