@@ -1,6 +1,8 @@
+// src/components/CodeEditor.tsx
+
 "use client";
 
-import { useEffect, useContext } from "react";
+import { useContext } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
 import { Button } from "@/shared/ui/button";
 import {
@@ -14,66 +16,41 @@ import Prism from "prismjs";
 import "prismjs/components/prism-javascript";
 import "prismjs/themes/prism.css";
 import { ExecutionContext } from "@/app/context/execution-context";
-import { executeCode } from "@/shared/lib/executor"; // 코드 실행 로직 함수
-import { parse } from "acorn"; // AST 파싱을 위한 acorn 임포트
-
-// 라인 번호를 표시하기 위한 간단한 컴포넌트
-function LineNumbers({ code }: { code: string }) {
-  const lines = code.split("\n").length;
-  const numbers = Array.from({ length: lines }, (_, i) => i + 1);
-  return (
-    <div className="line-numbers">
-      {numbers.map((number) => (
-        <div key={number} className="line-number">
-          {number}
-        </div>
-      ))}
-    </div>
-  );
-}
+import { executeCode } from "@/shared/lib/executor";
+import { LineNumbers } from "./line-numbers";
 
 export function CodeEditor() {
   const { state, dispatch } = useContext(ExecutionContext);
-  const { code, isRunning, ast, step } = state; // AST와 스텝 상태 가져오기
-
-  useEffect(() => {
-    console.log(step);
-  }, [step]);
-
-  const handleRun = async () => {
-    const parsedAst = parse(code, { ecmaVersion: "latest" }); // AST 저장
-    dispatch({ type: "RUN", payload: parsedAst });
-    // dispatch({ type: "RESET_STEP" }); // 스텝 초기화 액션 추가
-    // await executeCode(code, dispatch); // 코드 실행
-    // dispatch({ type: "PAUSE" }); // 실행 완료 후 일시정지
-  };
-
-  const handlePause = () => {
-    dispatch({ type: "PAUSE" });
-    // 코드 일시정지 로직 추가 (인터프리터 제어 등)
-  };
-
-  const handleStep = async () => {
-    if (ast) {
-      const node = ast.body[step]; // 리듀서의 step 값을 사용하여 현재 스텝에 해당하는 노드 가져오기
-      if (node) {
-        await executeCode(code, dispatch, node); // node를 인자로 전달하여 실행
-        dispatch({ type: "STEP_FORWARD" }); // 스텝 증가
-      } else {
-        console.warn("모든 스텝이 완료되었습니다."); // 모든 노드를 처리한 경우
-      }
-    }
-  };
-
-  const handleReset = () => {
-    dispatch({ type: "RESET" });
-    // 리셋 시 AST도 초기화될 것이므로 별도 처리 필요 시 추가 가능
-  };
+  const { code, isRunning, executionSteps, step } = state; // executionSteps와 step 가져오기
 
   // Prism을 사용한 구문 강조 함수
   const highlightCode = (code: string) => {
     return Prism.highlight(code, Prism.languages.javascript, "javascript");
   };
+
+  // 실행 함수
+  const handleRun = () => {
+    dispatch({ type: "RESET" }); // 실행 전 상태 초기화
+    executeCode(code, dispatch); // 코드 실행
+  };
+
+  // 일시 정지 함수
+  const handlePause = () => {
+    dispatch({ type: "PAUSE" });
+  };
+
+  // 스텝 진행 함수
+  const handleStep = () => {
+    dispatch({ type: "STEP_FORWARD" });
+  };
+
+  // 리셋 함수
+  const handleReset = () => {
+    dispatch({ type: "RESET" });
+  };
+
+  // 현재 스텝의 실행 단계 가져오기
+  const currentExecutionStep = executionSteps[step];
 
   return (
     <Card className="lg:col-span-1">
@@ -112,12 +89,38 @@ export function CodeEditor() {
           >
             <PauseIcon className="mr-2 h-4 w-4" /> Pause
           </Button>
-          <Button onClick={handleStep} disabled={!isRunning} variant="outline">
+          <Button
+            onClick={handleStep}
+            disabled={!isRunning || step >= executionSteps.length - 1}
+            variant="outline"
+          >
             <StepForwardIcon className="mr-2 h-4 w-4" /> Step
           </Button>
           <Button onClick={handleReset} variant="destructive">
             <RotateCwIcon className="mr-2 h-4 w-4" /> Reset
           </Button>
+        </div>
+        {/* 실행 단계 시각화 */}
+        <div className="mt-4">
+          <h3>Call Stack:</h3>
+          <ul>
+            {currentExecutionStep?.callStack.map((funcName, index) => (
+              <li key={index}>{funcName}</li>
+            ))}
+          </ul>
+          {/* 태스크 큐와 마이크로태스크 큐도 유사하게 표시 */}
+          <h3>Task Queue:</h3>
+          <ul>
+            {currentExecutionStep?.taskQueue.map((task, index) => (
+              <li key={index}>{task.name}</li>
+            ))}
+          </ul>
+          <h3>Microtask Queue:</h3>
+          <ul>
+            {currentExecutionStep?.microtaskQueue.map((microtask, index) => (
+              <li key={index}>{microtask.name}</li>
+            ))}
+          </ul>
         </div>
       </CardContent>
     </Card>

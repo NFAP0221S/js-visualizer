@@ -1,11 +1,12 @@
 // src/shared/lib/executor.ts
-import { parse, Node } from "acorn";
-import { ExecutionAction } from "@/shared/types/type"; // 실행 컨텍스트 정의
 
-// AST 노드를 타입별로 구분하기 위한 타입 정의 (필요에 따라 확장 가능)
+import { parse, Node } from "acorn";
+import { ExecutionAction, ExecutionStep } from "@/shared/types/type";
+
+// AST 노드를 타입별로 구분하기 위한 타입 정의
 type ASTNode = Node;
 
-// 간단한 변수 환경 스택
+// 변수 환경 스택
 interface VariableEnvironment {
   [key: string]: any;
 }
@@ -14,70 +15,132 @@ interface VariableEnvironment {
 interface ExecutionContext {
   callStack: string[];
   variableEnv: VariableEnvironment;
+  taskQueue: Function[];
+  microtaskQueue: Function[];
 }
 
 // 주어진 코드 문자열을 실행하는 비동기 함수
 export async function executeCode(
   code: string,
-  dispatch: React.Dispatch<ExecutionAction>,
-  node: ASTNode // node를 인자로 추가
+  dispatch: React.Dispatch<ExecutionAction>
 ) {
-  console.log("### 코드 실행 시작");
-  const ast = parse(code, { ecmaVersion: "latest" });
-  console.log("### ast:", ast);
-  const executionContext: ExecutionContext = {
-    callStack: ["global"], // 초기 콜 스택에 global 추가
+  const ast = parse(code, { ecmaVersion: "latest", locations: true });
+
+  // 실행 컨텍스트 초기화
+  const context: ExecutionContext = {
+    callStack: [],
     variableEnv: {},
+    taskQueue: [],
+    microtaskQueue: [],
   };
 
-  const executeNode = async (node: ASTNode) => {
-    console.log(`### 노드 실행: ${node.type}`);
-    
-    switch (node.type) {
-      case "Program":
-        // Program 노드의 모든 바디 노드를 순차적으로 실행
-        for (const bodyNode of node.body) {
-          await executeNode(bodyNode); // 모든 바디 노드 실행
-        }
-        break;
+  // 실행 단계별 상태를 저장할 배열
+  const executionSteps: ExecutionStep[] = [];
 
-      case "ExpressionStatement":
-        // ExpressionStatement가 CallExpression을 포함하고 있는지 확인
-        if (node.expression.type === "CallExpression") {
-          const calleeName = node.expression.callee.type === "Identifier" 
-            ? node.expression.callee.name 
-            : `${node.expression.callee.object.name}.${node.expression.callee.property.name}`;
+  // 프로그램 시작 시점의 상태 저장
+  executionSteps.push({
+    callStack: [...context.callStack],
+    taskQueue: [...context.taskQueue],
+    microtaskQueue: [...context.microtaskQueue],
+    currentNode: null,
+  });
 
-          executionContext.callStack.push(calleeName); // 콜 스택에 추가
-          dispatch({ type: "UPDATE_CALL_STACK", payload: [...executionContext.callStack] });
+  // AST 실행 시작
+  await executeNode(ast, context, executionSteps);
 
-          console.log(`### 콜 스택에 추가: ${calleeName}`); // 푸시 시 로그 출력
-
-          // Dummy delay to mimic asynchronous behavior
-          await new Promise(resolve => setTimeout(resolve, 100));
-
-          // 현재 콜 스택 상태 로그
-          console.log("### 현재 콜 스택:", executionContext.callStack);
-
-          executionContext.callStack.pop(); // 콜 스택에서 제거
-          dispatch({ type: "UPDATE_CALL_STACK", payload: [...executionContext.callStack] });
-
-          console.log(`### 콜 스택에서 제거: ${calleeName}`); // 팝 시 로그 출력
-        }
-        break;
-
-      case "FunctionDeclaration":
-        const funcName = node.id.name;
-        executionContext.variableEnv[funcName] = node; // 함수 저장
-        break;
-
-      default:
-        console.warn(`처리되지 않은 노드 타입: ${node.type}`);
-    }
-  };
-
-  // 현재 스텝을 기준으로 노드를 실행합니다.
-  await executeNode(node); // 현재 스텝의 노드를 실행합니다.
-
-  console.log("### 코드 실행 완료");
+  // 실행 완료 후 상태를 리듀서에 전달
+  dispatch({
+    type: "RUN",
+    payload: {
+      ast: ast,
+      executionSteps: executionSteps,
+    },
+  });
 }
+
+// AST 노드를 실행하는 함수
+async function executeNode(
+  node: ASTNode,
+  context: ExecutionContext,
+  executionSteps: ExecutionStep[]
+) {
+  switch (node.type) {
+    case "Program":
+      for (const stmt of node.body) {
+        await executeNode(stmt, context, executionSteps);
+      }
+      break;
+    case "FunctionDeclaration":
+      // 함수 선언을 변수 환경에 저장
+      const funcName = node.id.name;
+      context.variableEnv[funcName] = createFunction(
+        node,
+        context,
+        executionSteps
+      );
+      break;
+    case "ExpressionStatement":
+      await executeNode(node.expression, context, executionSteps);
+      break;
+    case "CallExpression":
+      await executeCallExpression(node, context, executionSteps);
+      break;
+    // 필요한 경우 다른 노드 타입 처리
+    default:
+      console.warn(`Unhandled node type: ${node.type}`);
+  }
+}
+
+// 함수 객체 생성
+function createFunction(
+  node: any,
+  context: ExecutionContext,
+  executionSteps: ExecutionStep[]
+) {
+  const func = async function () {
+    // 함수 호출 시 콜 스택에 추가
+    context.callStack.push(node.id.name);
+    // 실행 단계 저장
+    executionSteps.push({
+      callStack: [...context.callStack],
+      taskQueue: [...context.taskQueue],
+      microtaskQueue: [...context.microtaskQueue],
+      currentNode: node,
+    });
+    // 함수 본문 실행
+    for (const stmt of node.body.body) {
+      await executeNode(stmt, context, executionSteps);
+    }
+    // 함수 실행 완료 후 콜 스택에서 제거
+    context.callStack.pop();
+    // 실행 단계 저장
+    executionSteps.push({
+      callStack: [...context.callStack],
+      taskQueue: [...context.taskQueue],
+      microtaskQueue: [...context.microtaskQueue],
+      currentNode: node,
+    });
+  };
+  Object.defineProperty(func, "name", { value: node.id.name });
+  return func;
+}
+
+// CallExpression 실행
+async function executeCallExpression(
+  node: any,
+  context: ExecutionContext,
+  executionSteps: ExecutionStep[]
+) {
+  // 함수 이름 가져오기
+  const funcName = node.callee.name;
+  const func = context.variableEnv[funcName];
+  if (func) {
+    await func();
+  } else {
+    console.error(`Function ${funcName} is not defined.`);
+  }
+}
+
+// 비동기 작업 처리 (필요 시 구현)
+// function handleMicrotask(...) { ... }
+// function handleTask(...) { ... }
