@@ -11,12 +11,19 @@ interface VariableEnvironment {
   [key: string]: any;
 }
 
+// 태스크 타입 정의
+interface Task {
+  delay: number;
+  func: () => Promise<void>;
+  name: string;
+}
+
 // 실행 컨텍스트
 interface ExecutionContext {
   callStack: string[];
   variableEnv: VariableEnvironment;
-  taskQueue: Function[];
-  microtaskQueue: Function[];
+  taskQueue: Task[];
+  microtaskQueue: (() => Promise<void>)[];
 }
 
 // 주어진 코드 문자열을 실행하는 비동기 함수
@@ -40,13 +47,16 @@ export async function executeCode(
   // 프로그램 시작 시점의 상태 저장
   executionSteps.push({
     callStack: [...context.callStack],
-    taskQueue: [...context.taskQueue],
-    microtaskQueue: [...context.microtaskQueue],
+    taskQueue: context.taskQueue.map((task) => task.name),
+    microtaskQueue: context.microtaskQueue.map((_, idx) => `microtask-${idx}`),
     currentNode: null,
   });
 
   // AST 실행 시작
   await executeNode(ast, context, executionSteps);
+
+  // 이벤트 루프 실행
+  await eventLoop(context, executionSteps);
 
   // 실행 완료 후 상태를 리듀서에 전달
   dispatch({
@@ -76,8 +86,22 @@ async function executeNode(
       context.variableEnv[funcName] = createFunction(
         node,
         context,
-        executionSteps
+        executionSteps,
+        funcName
       );
+      break;
+    case "VariableDeclaration":
+      for (const decl of node.declarations) {
+        await executeNode(decl, context, executionSteps);
+      }
+      break;
+    case "VariableDeclarator":
+      if (node.init) {
+        const value = await evaluateExpression(node.init, context, executionSteps);
+        context.variableEnv[node.id.name] = value;
+      } else {
+        context.variableEnv[node.id.name] = undefined;
+      }
       break;
     case "ExpressionStatement":
       await executeNode(node.expression, context, executionSteps);
@@ -95,16 +119,17 @@ async function executeNode(
 function createFunction(
   node: any,
   context: ExecutionContext,
-  executionSteps: ExecutionStep[]
+  executionSteps: ExecutionStep[],
+  name: string
 ) {
   const func = async function () {
     // 함수 호출 시 콜 스택에 추가
-    context.callStack.push(node.id.name);
+    context.callStack.push(name);
     // 실행 단계 저장
     executionSteps.push({
       callStack: [...context.callStack],
-      taskQueue: [...context.taskQueue],
-      microtaskQueue: [...context.microtaskQueue],
+      taskQueue: context.taskQueue.map((task) => task.name),
+      microtaskQueue: context.microtaskQueue.map((_, idx) => `microtask-${idx}`),
       currentNode: node,
     });
     // 함수 본문 실행
@@ -116,12 +141,12 @@ function createFunction(
     // 실행 단계 저장
     executionSteps.push({
       callStack: [...context.callStack],
-      taskQueue: [...context.taskQueue],
-      microtaskQueue: [...context.microtaskQueue],
+      taskQueue: context.taskQueue.map((task) => task.name),
+      microtaskQueue: context.microtaskQueue.map((_, idx) => `microtask-${idx}`),
       currentNode: node,
     });
   };
-  Object.defineProperty(func, "name", { value: node.id.name });
+  Object.defineProperty(func, "name", { value: name });
   return func;
 }
 
@@ -132,15 +157,166 @@ async function executeCallExpression(
   executionSteps: ExecutionStep[]
 ) {
   // 함수 이름 가져오기
-  const funcName = node.callee.name;
-  const func = context.variableEnv[funcName];
-  if (func) {
+  const callee = node.callee;
+  if (callee.type === "Identifier") {
+    const funcName = callee.name;
+    if (funcName === "setTimeout") {
+      // setTimeout 처리
+      await handleSetTimeout(node, context, executionSteps);
+    } else {
+      const func = context.variableEnv[funcName];
+      if (func) {
+        await func();
+      } else {
+        console.error(`Function ${funcName} is not defined.`);
+      }
+    }
+  } else if (callee.type === "FunctionExpression") {
+    // 즉시 실행 함수 처리 (필요 시)
+    const func = createAnonymousFunction(
+      callee,
+      context,
+      executionSteps,
+      "anonymous"
+    );
     await func();
   } else {
-    console.error(`Function ${funcName} is not defined.`);
+    console.error(`Unsupported callee type: ${callee.type}`);
   }
 }
 
-// 비동기 작업 처리 (필요 시 구현)
-// function handleMicrotask(...) { ... }
-// function handleTask(...) { ... }
+// setTimeout 처리 함수
+async function handleSetTimeout(
+  node: any,
+  context: ExecutionContext,
+  executionSteps: ExecutionStep[]
+) {
+  // 첫 번째 인자는 콜백 함수
+  const callbackNode = node.arguments[0];
+  // 두 번째 인자는 지연 시간(ms)
+  const delayNode = node.arguments[1];
+  let delay = 0;
+  if (delayNode && delayNode.type === "Literal") {
+    delay = delayNode.value;
+  }
+
+  // 콜백 함수 생성
+  const callbackFunction = createAnonymousFunction(
+    callbackNode,
+    context,
+    executionSteps,
+    callbackNode.id ? callbackNode.id.name : "anonymous"
+  );
+
+  // 태스크 큐에 태스크 추가 (지연 시간 순으로 정렬)
+  context.taskQueue.push({
+    delay,
+    func: callbackFunction,
+    name: callbackNode.id ? callbackNode.id.name : "anonymous",
+  });
+  context.taskQueue.sort((a, b) => a.delay - b.delay);
+
+  // 실행 단계 저장
+  executionSteps.push({
+    callStack: [...context.callStack],
+    taskQueue: context.taskQueue.map((task) => task.name),
+    microtaskQueue: context.microtaskQueue.map((_, idx) => `microtask-${idx}`),
+    currentNode: node,
+  });
+}
+
+// 익명 함수 생성 (FunctionExpression)
+function createAnonymousFunction(
+  node: any,
+  context: ExecutionContext,
+  executionSteps: ExecutionStep[],
+  name: string
+) {
+  const func = async function () {
+    // 함수 호출 시 콜 스택에 추가
+    context.callStack.push(name);
+    // 실행 단계 저장
+    executionSteps.push({
+      callStack: [...context.callStack],
+      taskQueue: context.taskQueue.map((task) => task.name),
+      microtaskQueue: context.microtaskQueue.map((_, idx) => `microtask-${idx}`),
+      currentNode: node,
+    });
+    // 함수 본문 실행
+    for (const stmt of node.body.body) {
+      await executeNode(stmt, context, executionSteps);
+    }
+    // 함수 실행 완료 후 콜 스택에서 제거
+    context.callStack.pop();
+    // 실행 단계 저장
+    executionSteps.push({
+      callStack: [...context.callStack],
+      taskQueue: context.taskQueue.map((task) => task.name),
+      microtaskQueue: context.microtaskQueue.map((_, idx) => `microtask-${idx}`),
+      currentNode: node,
+    });
+  };
+  Object.defineProperty(func, "name", { value: name });
+  return func;
+}
+
+// 이벤트 루프 시뮬레이션
+async function eventLoop(
+  context: ExecutionContext,
+  executionSteps: ExecutionStep[]
+) {
+  // 현재 시간
+  let currentTime = 0;
+  // 태스크 큐의 태스크가 없을 때까지 반복
+  while (context.taskQueue.length > 0 || context.microtaskQueue.length > 0) {
+    // 마이크로태스크 처리
+    while (context.microtaskQueue.length > 0) {
+      const microtask = context.microtaskQueue.shift();
+      await microtask();
+      // 실행 단계 저장
+      executionSteps.push({
+        callStack: [...context.callStack],
+        taskQueue: context.taskQueue.map((task) => task.name),
+        microtaskQueue: context.microtaskQueue.map((_, idx) => `microtask-${idx}`),
+        currentNode: null,
+      });
+    }
+
+    // 태스크 처리
+    if (context.taskQueue.length > 0) {
+      const task = context.taskQueue.shift();
+      // 지연 시간 시뮬레이션
+      if (task.delay > currentTime) {
+        currentTime = task.delay;
+      }
+      await task.func();
+      // 실행 단계 저장
+      executionSteps.push({
+        callStack: [...context.callStack],
+        taskQueue: context.taskQueue.map((task) => task.name),
+        microtaskQueue: context.microtaskQueue.map((_, idx) => `microtask-${idx}`),
+        currentNode: null,
+      });
+    }
+  }
+}
+
+// 표현식 평가 함수 (필요 시 확장)
+async function evaluateExpression(
+  node: any,
+  context: ExecutionContext,
+  executionSteps: ExecutionStep[]
+): Promise<any> {
+  switch (node.type) {
+    case "Literal":
+      return node.value;
+    case "Identifier":
+      return context.variableEnv[node.name];
+    case "CallExpression":
+      await executeCallExpression(node, context, executionSteps);
+      return undefined;
+    default:
+      console.warn(`Unhandled expression type: ${node.type}`);
+      return undefined;
+  }
+}

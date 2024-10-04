@@ -101,6 +101,7 @@ export function CodeEditor() {
           </Button>
         </div>
         {/* 실행 단계 시각화 */}
+        // 실행 단계 시각화 부분 수정
         <div className="mt-4">
           <h3>Call Stack:</h3>
           <ul>
@@ -111,15 +112,17 @@ export function CodeEditor() {
           {/* 태스크 큐와 마이크로태스크 큐도 유사하게 표시 */}
           <h3>Task Queue:</h3>
           <ul>
-            {currentExecutionStep?.taskQueue.map((task, index) => (
-              <li key={index}>{task.name}</li>
+            {currentExecutionStep?.taskQueue.map((taskName, index) => (
+              <li key={index}>{taskName}</li>
             ))}
           </ul>
           <h3>Microtask Queue:</h3>
           <ul>
-            {currentExecutionStep?.microtaskQueue.map((microtask, index) => (
-              <li key={index}>{microtask.name}</li>
-            ))}
+            {currentExecutionStep?.microtaskQueue.map(
+              (microtaskName, index) => (
+                <li key={index}>{microtaskName}</li>
+              )
+            )}
           </ul>
         </div>
       </CardContent>
